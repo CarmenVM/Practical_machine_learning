@@ -1,0 +1,92 @@
+---
+title: 'Machine Learning: Course Project'
+author: "Carmen Vazquez Martin"
+date: "Wednesday, May 20, 2015"
+output: html_document
+---
+####Introduction
+
+In this report I will cerate a machine learning algorithm to predict, using data from accelerometers on the belt, forearm, arm and dumbell, whether barrel lifts where performed in one of five different ways: exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E).
+
+Read more about this dataset [here]("http://groupware.les.inf.puc-rio.br/har#ixzz3asalCbXs")
+
+####Preparing the data
+
+The data was collected using 4 sensors: one on the belt, glove, arm and dumbbell. Each sensor yields x, y, z components on gyros, accel and magnet. These data has been used to calculate roll, pitch, yaw and total acceleration. In my model, I have used these last measurements to predict the classe variable. 
+
+I have downloaded the data from the source [webpage]("http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"), selected the data from the accelerometers  and taken out the window calculations used by the original authors (Velloso et al. 2013). Using the caret package I created a training set (75% of the original data) and a testing set (The remaining 25%). 
+
+```{r download.data, warning=FALSE, echo=FALSE, message=FALSE}
+library(caret); library(ggplot2);library(randomForest);library(rpart);library(rattle); library(grid); library(gridExtra)
+
+url<-"http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+url.test<-"http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+#Download training data from 
+if (!file.exists("~/course_project_data.csv")) {
+  download.file(url, "~/course_project_data.csv")}
+raw.data<-read.csv("~/course_project_data.csv")
+
+# Select the data: roll pitch, yaw and total acceleration for arm, forearm, belt and dumbbell
+
+roll<-raw.data[,grep("^roll", colnames(raw.data))]
+pitch<-raw.data[,grep("^pitch", colnames(raw.data))]
+yaw<-raw.data[,grep("^yaw", colnames(raw.data))]
+total_accel<-raw.data[,grep("^total_accel", colnames(raw.data))]
+classe<-raw.data$classe
+#gyros,magnet,accel,
+data<-cbind(pitch, roll, yaw, total_accel, classe)
+
+#Divide the training in training and testing, reserve testing data for the other assignment
+inTrain<-createDataPartition(y=data$classe, p=0.75, list=FALSE)
+training<-data[inTrain,]
+testing<-data[-inTrain,]
+```
+
+####Feature selection: random forest
+
+After some exploratory analysis, I could not find a variable(s) that seemed to explain the variation in the data (Figure 1). For this reason I decided to use a random forest approach to create a prediction algorithm. 
+
+```{r, warning=FALSE, echo=FALSE}
+a<-qplot(yaw_belt, colour=classe, data=training, geom="density")##YES
+b<-qplot(pitch_arm, colour=classe, data=training, geom="density")##Okish for A
+c<-qplot(pitch_forearm, colour=classe, data=training, geom="density")#Good for some A mb D
+d<-qplot(roll_belt, colour=classe, data=training, geom="density")##OKish for E
+e<-qplot(roll_forearm, colour=classe, data=training, geom="density")##OKish for E
+f<-qplot(roll_dumbbell, colour=classe, data=training, geom="density")##OKish for E
+grid.arrange(a,b,c,d,e,f, ncol = 2, main = "Density plot: Important variables")
+```
+**Figure1.** Density plot of the most important variables in the algorithm. 
+
+
+####Prediction and out of sample error
+
+```{r, warning=FALSE, echo=FALSE}
+mod.all<-train(classe~., data=training, method="rf")
+```
+
+
+Using a random forest approach, I have predicted the class of exercise using the calculated roll, yaw, pitch and total acceleration with  in sample accuracy of `r mod.all$results$Accuracy[1]`.
+
+```{r, warning=FALSE, echo=FALSE}
+mod.all$finalModel$confusion
+```
+**Table 1.** Confusion Matrix obtained using only the training data. 
+
+##Predictions and out of sample error
+
+```{r, warning=FALSE, echo=FALSE}
+pred<-predict(mod.all, testing)
+con.mat<-confusionMatrix(pred,testing$classe)
+```
+
+The model created with the training data, performs well using the tets data (Table 2). The expected  of sample accuracy is `r con.mat$overall[1]`. 
+
+```{r, warning=FALSE, echo=FALSE}
+con.mat$table
+```
+**Table 2.** Confusion Matrix of the model predictions vs the test values.
+
+####References
+
+Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013.
+
